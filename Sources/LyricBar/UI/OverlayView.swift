@@ -44,9 +44,13 @@ enum OverlayLayout {
 }
 
 enum OverlayStyle {
-    /// Colour of the sung part of the current line.
+    /// Colour of the sung part of the current line: a rainbow across the whole
+    /// line, revealed as the fill advances. Slightly desaturated and fully
+    /// bright so every hue stays readable over the text shadow.
     static let highlight = LinearGradient(
-        colors: [Color(red: 0.40, green: 0.85, blue: 1.0), Color(red: 0.62, green: 1.0, blue: 0.80)],
+        colors: [0.0, 0.08, 0.16, 0.33, 0.5, 0.62, 0.76, 0.88, 1.0].map {
+            Color(hue: $0, saturation: 0.8, brightness: 1.0)
+        },
         startPoint: .leading, endPoint: .trailing
     )
 }
