@@ -15,9 +15,10 @@ final class LyricsResolver {
         self.providers = providers
     }
 
-    func resolve(_ track: TrackInfo) async -> LyricsDocument? {
+    func resolve(_ track: TrackInfo, progress: ((String) -> Void)? = nil) async -> LyricsDocument? {
         for provider in providers {
             if Task.isCancelled { return nil }
+            progress?("Searching \(provider.name)…")
             let started = Date()
             if let doc = await provider.lyrics(for: track) {
                 let ms = Int(Date().timeIntervalSince(started) * 1000)

@@ -13,6 +13,10 @@ struct TrackInfo: Equatable {
     var album: String
     /// Seconds. 0 when unknown.
     var duration: TimeInterval
+    /// When this track started playing (host time), estimated from the playback
+    /// position at the moment the track was first seen. Used to pair the track
+    /// with the lyrics file Music writes right after a track starts.
+    var playbackStartedAt: Date? = nil
 
     /// Stable key used to detect track changes and to cache lyrics.
     /// Built from the content rather than the player ID so the same song

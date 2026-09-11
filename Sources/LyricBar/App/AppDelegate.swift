@@ -50,11 +50,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         state.clock.sync(position: snapshot.position, at: snapshot.sampledAt, playing: snapshot.state == .playing)
 
         if snapshot.track?.contentKey != previousKey {
-            state.track = snapshot.track
+            var track = snapshot.track
+            track?.playbackStartedAt = snapshot.sampledAt.addingTimeInterval(-snapshot.position)
+            state.track = track
             state.lyrics = nil
             lyricsTask?.cancel()
-            if let track = snapshot.track {
-                Log.info("Now playing: \"\(track.title)\" by \(track.artist) [\(Int(track.duration))s]")
+            if let track {
+                Log.info("Now playing: \"\(track.title)\" by \(track.artist) [\(Int(track.duration))s], position \(String(format: "%.1f", snapshot.position))s")
                 fetchLyrics(for: track)
             } else {
                 state.lyricsStatus = "Nothing playing"
@@ -67,7 +69,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard let resolver else { return }
         state.lyricsStatus = "Searching…"
         lyricsTask = Task { [weak self] in
-            let doc = await resolver.resolve(track)
+            let doc = await resolver.resolve(track, progress: { status in
+                Task { @MainActor [weak self] in
+                    guard let self, self.state.track?.contentKey == track.contentKey, self.state.lyrics == nil else { return }
+                    self.state.lyricsStatus = status
+                }
+            })
             guard !Task.isCancelled, let self, self.state.track?.contentKey == track.contentKey else { return }
             self.state.lyrics = doc
             if let doc {

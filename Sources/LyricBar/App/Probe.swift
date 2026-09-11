@@ -1,15 +1,18 @@
 import Foundation
 
-/// `LyricBar --probe "<title>" "<artist>" [durationSeconds]`
+/// `LyricBar --probe "<title>" "<artist>" [durationSeconds] [secondsSincePlaybackStarted]`
 /// Runs the lyrics pipeline without any UI and prints what it finds.
 enum Probe {
     static func run(_ args: [String]) -> Never {
         guard args.count >= 2 else {
-            print("usage: LyricBar --probe <title> <artist> [durationSeconds]")
+            print("usage: LyricBar --probe <title> <artist> [durationSeconds] [secondsSincePlaybackStarted]")
             exit(2)
         }
         let duration = args.count >= 3 ? (Double(args[2]) ?? 0) : 0
-        let track = TrackInfo(id: "", title: args[0], artist: args[1], album: "", duration: duration)
+        var track = TrackInfo(id: "", title: args[0], artist: args[1], album: "", duration: duration)
+        if args.count >= 4, let elapsed = Double(args[3]) {
+            track.playbackStartedAt = Date().addingTimeInterval(-elapsed)
+        }
         let resolver = LyricsResolver(providers: [
             AppleMusicCacheProvider(store: nil, maxWait: 0),
             LRCLIBProvider(store: nil, isEnabled: { true }),

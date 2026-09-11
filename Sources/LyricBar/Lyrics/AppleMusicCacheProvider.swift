@@ -50,13 +50,19 @@ final class AppleMusicCacheProvider: LyricsProvider {
         var attempt = 0
         while true {
             if Task.isCancelled { return nil }
-            if let hit = scan(for: track) {
-                if let doc = TTMLParser.parse(hit.ttml, source: name) {
-                    store?.save(hit.ttml, format: .ttml, for: track)
+            switch scan(for: track) {
+            case .found(let songID, let ttml):
+                if let doc = TTMLParser.parse(ttml, source: name) {
+                    store?.save(ttml, format: .ttml, for: track)
                     return doc
                 }
-                Log.warn("Cache hit for song \(hit.songID) but TTML did not parse")
+                Log.warn("Cache hit for song \(songID) but TTML did not parse")
                 return nil
+            case .noLyrics(let songID):
+                Log.info("Apple Music cache: song \(songID) has no synced lyrics")
+                return nil
+            case .notFound:
+                break
             }
             attempt += 1
             let now = Date()
@@ -68,17 +74,47 @@ final class AppleMusicCacheProvider: LyricsProvider {
 
     // MARK: Scanning
 
-    private func scan(for track: TrackInfo) -> (songID: String, ttml: String)? {
+    private enum ScanResult {
+        case found(songID: String, ttml: String)
+        /// Music fetched this track, but Apple has no synced lyrics for it.
+        case noLyrics(songID: String)
+        case notFound
+    }
+
+    /// How confident we are that a cached song is the current track.
+    private enum MatchKind: Int, Comparable {
+        /// Same title and duration. Titles can differ between the library and the
+        /// catalog response (e.g. "就是现在" vs "Now Is the Time" when Music runs
+        /// in English), so this is not the only rule.
+        case title = 3
+        /// Same duration and the file was written after this track started:
+        /// Music requests the lyrics of a track right after it starts playing.
+        case timing = 2
+        /// Same duration and no other cached song has that duration.
+        case uniqueDuration = 1
+
+        static func < (a: MatchKind, b: MatchKind) -> Bool { a.rawValue < b.rawValue }
+    }
+
+    private func scan(for track: TrackInfo) -> ScanResult {
         let fm = FileManager.default
         guard let urls = try? fm.contentsOfDirectory(
             at: directory,
             includingPropertiesForKeys: [.contentModificationDateKey, .fileSizeKey],
             options: [.skipsHiddenFiles]
         ) else {
-            return nil
+            return .notFound
         }
 
-        var best: (mtime: Date, url: URL, song: SongMeta)?
+        struct Candidate {
+            let kind: MatchKind
+            let mtime: Date
+            let url: URL
+            let song: SongMeta
+        }
+        var candidates: [Candidate] = []
+        var sameDurationSongIDs = Set<String>()
+
         lock.lock()
         defer { lock.unlock() }
         for url in urls {
@@ -93,9 +129,10 @@ final class AppleMusicCacheProvider: LyricsProvider {
                 entry = CacheEntry(mtime: mtime, size: size, songs: Self.parseSongs(at: url))
                 index[key] = entry
             }
-            for song in entry.songs where song.hasLyrics && Self.matches(song, track) {
-                if best == nil || mtime > best!.mtime {
-                    best = (mtime, url, song)
+            for song in entry.songs {
+                if Self.durationDelta(song, track) <= 1.0 { sameDurationSongIDs.insert(song.id) }
+                if let kind = Self.classify(song, track, fileModifiedAt: mtime) {
+                    candidates.append(Candidate(kind: kind, mtime: mtime, url: url, song: song))
                 }
             }
         }
@@ -103,19 +140,45 @@ final class AppleMusicCacheProvider: LyricsProvider {
         let present = Set(urls.map(\.lastPathComponent))
         index = index.filter { present.contains($0.key) }
 
-        guard let hit = best, let ttml = Self.extractTTML(at: hit.url, songID: hit.song.id) else { return nil }
-        Log.info("Apple Music cache: matched song \(hit.song.id) \"\(hit.song.title)\" in \(hit.url.lastPathComponent)")
-        return (hit.song.id, ttml)
+        // A duration-only match is only trusted when nothing else has that duration.
+        if sameDurationSongIDs.count != 1 {
+            candidates.removeAll { $0.kind == .uniqueDuration }
+        }
+        // Best confidence first, then the closest duration, then the newest file.
+        guard let hit = candidates.max(by: { a, b in
+            if a.kind != b.kind { return a.kind < b.kind }
+            let da = Self.durationDelta(a.song, track), db = Self.durationDelta(b.song, track)
+            if abs(da - db) > 0.05 { return da > db }
+            return a.mtime < b.mtime
+        }) else { return .notFound }
+
+        guard hit.song.hasLyrics else { return .noLyrics(songID: hit.song.id) }
+        guard let ttml = Self.extractTTML(at: hit.url, songID: hit.song.id) else { return .notFound }
+        Log.info("Apple Music cache: matched song \(hit.song.id) \"\(hit.song.title)\" by \(hit.song.artist) via \(hit.kind) in \(hit.url.lastPathComponent)")
+        return .found(songID: hit.song.id, ttml: ttml)
     }
 
-    private static func matches(_ song: SongMeta, _ track: TrackInfo) -> Bool {
+    private static func durationDelta(_ song: SongMeta, _ track: TrackInfo) -> TimeInterval {
+        guard track.duration > 0, song.durationMs > 0 else { return .infinity }
+        return abs(track.duration - Double(song.durationMs) / 1000)
+    }
+
+    private static func classify(_ song: SongMeta, _ track: TrackInfo, fileModifiedAt mtime: Date) -> MatchKind? {
+        let delta = durationDelta(song, track)
         let title = TextNormalizer.normalize(track.title)
-        guard !title.isEmpty, title == TextNormalizer.normalize(song.title) else { return false }
+        let sameTitle = !title.isEmpty && title == TextNormalizer.normalize(song.title)
         let sameArtist = TextNormalizer.normalize(track.artist) == TextNormalizer.normalize(song.artist)
-        let durationKnown = track.duration > 0 && song.durationMs > 0
-        let sameDuration = durationKnown && abs(track.duration - Double(song.durationMs) / 1000) <= 2.5
-        if durationKnown { return sameDuration && (sameArtist || abs(track.duration - Double(song.durationMs) / 1000) <= 1.0) }
-        return sameArtist
+
+        if sameTitle {
+            if delta <= 2.5 { return .title }
+            if delta == .infinity, sameArtist { return .title }
+        }
+        if delta <= 1.5, let started = track.playbackStartedAt,
+           mtime >= started.addingTimeInterval(-120), mtime <= Date().addingTimeInterval(5) {
+            return .timing
+        }
+        if delta <= 1.0 { return .uniqueDuration }
+        return nil
     }
 
     private static func songsArray(at url: URL) -> [[String: Any]]? {
