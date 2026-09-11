@@ -27,7 +27,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         statusBar = StatusBarController(state: state, reloadLyrics: { [weak self] in self?.reloadLyrics() })
 
         state.$overlayVisible.dropFirst().sink { [weak self] _ in self?.overlay?.updateVisibility() }.store(in: &cancellables)
-        state.$locked.sink { [weak self] locked in self?.overlay?.setLocked(locked) }.store(in: &cancellables)
+        state.$movable.sink { [weak self] movable in self?.overlay?.setMovable(movable) }.store(in: &cancellables)
         state.$fontSize.sink { [weak self] size in self?.overlay?.setFontSize(size) }.store(in: &cancellables)
 
         let monitor = AppleMusicMonitor()

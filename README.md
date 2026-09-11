@@ -29,10 +29,16 @@ make logs         # follow ~/Library/Logs/LyricBar/lyricbar.log
 On first launch macOS asks whether LyricBar may control Music. Allow it: that is
 how the app reads the current track and playback position.
 
-A music note icon appears in the menu bar. Click it to toggle the overlay, lock
-its position (click-through), adjust the timing offset and the font size, or quit.
-While unlocked the overlay shows a dashed outline and can be dragged anywhere;
-the position is remembered.
+A music note icon appears in the menu bar. Click it to toggle the overlay,
+adjust the timing offset and the font size, or quit.
+
+The overlay never gets in the way: clicks pass straight through it, and it fades
+out while the mouse pointer is over it so you can read and click whatever is
+underneath. To reposition it, switch on **Move mode** in the popover, drag the
+dashed area, and switch Move mode off again. The position is remembered.
+
+The current line fills with colour word by word as it is sung (Apple's lyrics
+carry word timing; for line-timed lyrics the fill is interpolated).
 
 ## How it works
 
@@ -51,7 +57,11 @@ Music.app ──notifications + AppleScript──▶ AppleMusicMonitor ──▶
 3. When the track changes, `LyricsResolver` asks each `LyricsProvider` in order.
    `AppleMusicCacheProvider` scans Music's URL cache for the JSON response of the
    `songs/{id}?include=syllable-lyrics` request Music makes for every track and
-   parses the embedded TTML. Results are copied to
+   parses the embedded TTML. A cached song is accepted when its title and
+   duration match, or when its duration matches and the file was written after
+   the current track started (Music reports library titles such as "就是现在"
+   while the catalog response uses the UI language, "Now Is the Time"), or when
+   it is the only cached song with that duration. Results are copied to
    `~/Library/Application Support/LyricBar/lyrics`.
 4. `OverlayView` (SwiftUI) renders the current line and the next one inside a
    borderless, non-activating `NSPanel` that joins all Spaces and floats above
@@ -74,6 +84,7 @@ See [docs/ARCHITECTURE.zh.md](docs/ARCHITECTURE.zh.md) for a walkthrough in Chin
 ## Roadmap
 
 - [x] v0.1 Apple Music, first-party lyrics, current + next line, menu bar controls
-- [ ] v0.2 Word-by-word highlight, translation line, launch at login, hide when idle
+- [x] v0.2 Word-by-word highlight, click-through with hover fade, move mode
+- [ ] v0.2.x Translation line, launch at login, hide when idle
 - [ ] v0.3 Spotify, multiple displays, style presets
 - [ ] v0.4 Manual lyrics search when the match is wrong, local `.lrc` files

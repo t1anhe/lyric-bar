@@ -51,6 +51,8 @@ final class TTMLParser: NSObject, XMLParserDelegate {
     private var lines: [RawLine] = []
     /// translation type -> (line key -> text)
     private var translations: [String: [String: String]] = [:]
+    /// translation type -> (line key -> timed words), when the translation carries spans
+    private var translationWords: [String: [String: [LyricWord]]] = [:]
 
     // Parser state.
     private var inBody = false
@@ -61,6 +63,8 @@ final class TTMLParser: NSObject, XMLParserDelegate {
     private var currentTranslationType: String?
     private var currentTextKey: String?
     private var textBuffer = ""
+    private var currentTranslationWord: LyricWord?
+    private var currentTranslationWords: [LyricWord] = []
 
     // MARK: XMLParserDelegate
 
@@ -86,6 +90,12 @@ final class TTMLParser: NSObject, XMLParserDelegate {
         case "text" where inTranslations:
             currentTextKey = attrs["for"]
             textBuffer = ""
+            currentTranslationWords = []
+            currentTranslationWord = nil
+        case "span" where inTranslations && currentTextKey != nil:
+            if let b = Self.time(attrs["begin"]), let e = Self.time(attrs["end"]) {
+                currentTranslationWord = LyricWord(start: b, end: e, text: "")
+            }
         case "p" where inBody:
             current = RawLine(key: attrs["itunes:key"], agent: attrs["ttm:agent"],
                               start: Self.time(attrs["begin"]) ?? 0, end: Self.time(attrs["end"]) ?? 0)
@@ -106,7 +116,10 @@ final class TTMLParser: NSObject, XMLParserDelegate {
 
     func parser(_ parser: XMLParser, foundCharacters string: String) {
         if inTranslations {
-            if currentTextKey != nil { textBuffer += string }
+            if currentTextKey != nil {
+                textBuffer += string
+                currentTranslationWord?.text += string
+            }
             return
         }
         guard inBody, current != nil, backgroundDepth == 0 else { return }
@@ -127,9 +140,18 @@ final class TTMLParser: NSObject, XMLParserDelegate {
         case "p" where inBody:
             if let line = current { lines.append(line) }
             current = nil
+        case "span" where inTranslations && currentTextKey != nil:
+            if var word = currentTranslationWord {
+                word.text = word.text.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !word.text.isEmpty { currentTranslationWords.append(word) }
+                currentTranslationWord = nil
+            }
         case "text" where inTranslations:
             if let key = currentTextKey, let type = currentTranslationType {
                 translations[type]?[key] = Self.collapseWhitespace(textBuffer)
+                if !currentTranslationWords.isEmpty {
+                    translationWords[type, default: [:]][key] = currentTranslationWords
+                }
             }
             currentTextKey = nil
         case "translation":
@@ -155,13 +177,18 @@ final class TTMLParser: NSObject, XMLParserDelegate {
         var out: [LyricLine] = []
         for (i, raw) in sorted.enumerated() {
             var text = Self.collapseWhitespace(raw.text)
-            if let key = raw.key, let r = replacement?[key], !r.isEmpty { text = r }
+            var words = raw.words
+            if let key = raw.key, let r = replacement?[key], !r.isEmpty {
+                text = r
+                // The replacement script has its own timed spans; keep them in sync with the text.
+                if let w = translationWords["replacement"]?[key], !w.isEmpty { words = w }
+            }
             guard !text.isEmpty else { continue }
             var end = raw.end
             if end <= raw.start {
                 end = i + 1 < sorted.count ? sorted[i + 1].start : raw.start + 5
             }
-            out.append(LyricLine(id: out.count, start: raw.start, end: end, text: text, words: raw.words,
+            out.append(LyricLine(id: out.count, start: raw.start, end: end, text: text, words: words,
                                  translation: raw.key.flatMap { subtitle?[$0] }, agent: raw.agent))
         }
         guard !out.isEmpty else { return nil }

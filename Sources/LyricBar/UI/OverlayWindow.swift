@@ -27,13 +27,25 @@ final class OverlayWindowController {
     private let panel: OverlayPanel
     private let state: AppState
     private var observers: [NSObjectProtocol] = []
+    private var hoverTimer: Timer?
+    private var movable = false
+    private var faded = false
     private static let frameKey = "overlayFrame"
+    private static let fadedAlpha: CGFloat = 0.15
 
     init(state: AppState) {
         self.state = state
         panel = OverlayPanel(frame: Self.initialFrame(fontSize: state.fontSize))
         panel.contentView = NSHostingView(rootView: OverlayView().environmentObject(state))
-        setLocked(state.locked)
+        setMovable(state.movable)
+
+        // Poll the mouse: the panel ignores mouse events while click-through, so
+        // it gets no hover events of its own. 10 Hz is plenty and costs nothing.
+        let timer = Timer(timeInterval: 0.1, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated { self?.checkHover() }
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        hoverTimer = timer
 
         for name in [NSWindow.didMoveNotification, NSWindow.didResizeNotification] {
             observers.append(NotificationCenter.default.addObserver(forName: name, object: panel, queue: .main) { [weak self] _ in
@@ -42,9 +54,28 @@ final class OverlayWindowController {
         }
     }
 
-    func setLocked(_ locked: Bool) {
-        panel.ignoresMouseEvents = locked
-        panel.isMovableByWindowBackground = !locked
+    func setMovable(_ movable: Bool) {
+        self.movable = movable
+        panel.ignoresMouseEvents = !movable
+        panel.isMovableByWindowBackground = movable
+        if movable { setFaded(false) }
+    }
+
+    /// Fade the lyrics while the mouse is over them so whatever is underneath
+    /// stays readable and clickable (clicks already pass through).
+    private func checkHover() {
+        guard panel.isVisible, !movable else { return }
+        let inside = panel.frame.insetBy(dx: -4, dy: -4).contains(NSEvent.mouseLocation)
+        setFaded(inside)
+    }
+
+    private func setFaded(_ fade: Bool) {
+        guard fade != faded else { return }
+        faded = fade
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = 0.2
+            panel.animator().alphaValue = fade ? Self.fadedAlpha : 1
+        }
     }
 
     /// The panel height follows the font size so the next line always fits.

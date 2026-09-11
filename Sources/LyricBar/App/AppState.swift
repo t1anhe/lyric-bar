@@ -11,7 +11,9 @@ final class AppState: ObservableObject {
 
     // Settings (persisted).
     @Published var overlayVisible: Bool { didSet { defaults.set(overlayVisible, forKey: Keys.overlayVisible) } }
-    @Published var locked: Bool { didSet { defaults.set(locked, forKey: Keys.locked) } }
+    /// Move mode: the overlay catches clicks and can be dragged. Otherwise it is
+    /// click-through and fades while the mouse is over it.
+    @Published var movable: Bool { didSet { defaults.set(movable, forKey: Keys.movable) } }
     @Published var offset: TimeInterval { didSet { defaults.set(offset, forKey: Keys.offset) } }
     @Published var fontSize: Double { didSet { defaults.set(fontSize, forKey: Keys.fontSize) } }
     @Published var lrclibEnabled: Bool { didSet { defaults.set(lrclibEnabled, forKey: Keys.lrclibEnabled) } }
@@ -22,7 +24,7 @@ final class AppState: ObservableObject {
 
     private enum Keys {
         static let overlayVisible = "overlayVisible"
-        static let locked = "locked"
+        static let movable = "overlayMovable"
         static let offset = "offset"
         static let fontSize = "fontSize"
         static let lrclibEnabled = "lrclibEnabled"
@@ -31,13 +33,13 @@ final class AppState: ObservableObject {
     init() {
         defaults.register(defaults: [
             Keys.overlayVisible: true,
-            Keys.locked: false,
+            Keys.movable: false,
             Keys.offset: 0.0,
             Keys.fontSize: 30.0,
             Keys.lrclibEnabled: true,
         ])
         overlayVisible = defaults.bool(forKey: Keys.overlayVisible)
-        locked = defaults.bool(forKey: Keys.locked)
+        movable = defaults.bool(forKey: Keys.movable)
         offset = defaults.double(forKey: Keys.offset)
         fontSize = defaults.double(forKey: Keys.fontSize)
         lrclibEnabled = defaults.bool(forKey: Keys.lrclibEnabled)

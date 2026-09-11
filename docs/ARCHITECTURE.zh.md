@@ -48,7 +48,12 @@ OverlayView（SwiftUI）每秒重绘 20 次：
 - `AppleMusicCacheProvider.swift`：核心。Music.app 每播一首歌都会请求
   `amp-api.music.apple.com/v1/catalog/<地区>/songs/<id>?include=syllable-lyrics…`，
   macOS 的 URL 缓存把响应原样存在 `~/Library/Caches/com.apple.Music/fsCachedData/<UUID>`。
-  我们扫描这个目录，用歌名 + 时长（或歌手）匹配当前曲目，取出 JSON 里的 TTML 字符串。
+  我们扫描这个目录，匹配当前曲目后取出 JSON 里的 TTML 字符串。匹配规则按可信度排序：
+  1. 歌名相同且时长相差 2.5 秒以内；
+  2. 时长相差 1.5 秒以内，且文件是在这首歌开始播放之后写入的。这条是为了应付本地化标题：
+     AppleScript 报的是资料库里的名字（"就是现在"），Music 请求歌词时用的是界面语言（"Now Is the Time"）；
+  3. 时长相差 1 秒以内，且整个缓存里只有这一首歌是这个时长。
+  同一档次里优先取时长最接近的，再取最新写入的文件。
   - 扫描有索引：每个文件记住修改时间和大小，没变的不重复解析；不是歌词的文件也记住，下次直接跳过。
   - 刚切歌时 Music 可能还没请求完，所以最多等 25 秒，每 1 到 2 秒重扫一次。
   - 匹配到的 TTML 会另存到 `~/Library/Application Support/LyricBar/lyrics/`，Music 的缓存被清也不怕。
@@ -62,8 +67,13 @@ OverlayView（SwiftUI）每秒重绘 20 次：
 
 - `OverlayWindow.swift`：`NSPanel` 子类。关键设置：无边框、透明、`.nonactivatingPanel`（点它不会抢焦点）、
   层级 `.statusBar`、`canJoinAllSpaces` + `fullScreenAuxiliary`（所有桌面和全屏应用之上都显示）。
-  锁定时 `ignoresMouseEvents = true` 鼠标穿透；解锁时可拖动，位置存进 UserDefaults。
-- `OverlayView.swift`：SwiftUI 视图。`TimelineView` 每 50 毫秒触发一次重算，用时钟算当前行。
+  平时 `ignoresMouseEvents = true` 鼠标穿透，并且每 0.1 秒查一次鼠标位置，鼠标在窗口上就把窗口 alpha 降到 0.15；
+  开启"移动模式"后窗口接收鼠标、可拖动，位置存进 UserDefaults。窗口高度跟字号联动。
+- `OverlayView.swift`：SwiftUI 视图。`TimelineView` 每秒重算 30 次，用时钟算当前行和当前唱到的位置。
+  歌词向上滚动：旧句上滑淡出，下一句放大上移，再下一句从底部淡入。
+- `LineMetrics.swift`：逐字染色的核心。用 `NSFont` 量出每个词在这一行里的横向起止位置，
+  当前时刻唱到第几个词、唱了几分之几，就换算成一个 x 坐标；视图里白色文字上叠一层彩色文字，
+  用宽度为 x 的矩形做遮罩。量尺寸不便宜，所以按"行 + 字号 + 宽度"缓存。
 - `StatusBarController.swift`：菜单栏图标 + `NSPopover`。
 - `PopoverView.swift`：面板内容，所有开关直接绑定到 `AppState` 的属性。
 

@@ -11,7 +11,7 @@ struct PopoverView: View {
                 Image(systemName: "music.note.list")
                 Text("LyricBar").font(.headline)
                 Spacer()
-                Text("v0.1").foregroundStyle(.secondary).font(.caption)
+                Text("v0.2").foregroundStyle(.secondary).font(.caption)
             }
 
             GroupBox("Now Playing") {
@@ -34,7 +34,11 @@ struct PopoverView: View {
             }
 
             Toggle("Show lyrics overlay", isOn: $state.overlayVisible)
-            Toggle("Lock position (click-through)", isOn: $state.locked)
+            VStack(alignment: .leading, spacing: 2) {
+                Toggle("Move mode (drag to reposition)", isOn: $state.movable)
+                Text("Off: clicks pass through and the lyrics fade while the mouse is over them.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
 
             HStack {
                 Text("Offset")

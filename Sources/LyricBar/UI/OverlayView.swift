@@ -2,25 +2,30 @@ import SwiftUI
 
 /// The floating lyrics. Fully transparent background; lines scroll upward: the
 /// finished line slides up and fades out, the next line moves up into the main
-/// slot, and the line after it slides in from below.
+/// slot, and the line after it slides in from below. The current line is
+/// filled with colour word by word as it is sung.
 struct OverlayView: View {
     @EnvironmentObject var state: AppState
 
     var body: some View {
-        TimelineView(.periodic(from: .now, by: 1.0 / 20.0)) { context in
+        TimelineView(.periodic(from: .now, by: 1.0 / 30.0)) { context in
             let position = state.clock.position(at: context.date) + state.offset
             content(at: position)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        // macOS lets clicks fall through fully transparent window pixels, so the
-        // window could not be dragged. Keep an invisible fill while unlocked.
-        .background(Color.black.opacity(state.locked ? 0 : 0.01))
+        // In move mode the window must catch clicks to be draggable; macOS lets
+        // clicks fall through fully transparent pixels, so keep an invisible fill.
+        .background(Color.black.opacity(state.movable ? 0.01 : 0))
+        .overlay(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .strokeBorder(Color.white.opacity(state.movable ? 0.35 : 0), style: StrokeStyle(lineWidth: 1, dash: [6, 4]))
+        )
     }
 
     @ViewBuilder
     private func content(at position: TimeInterval) -> some View {
         if let doc = state.lyrics {
-            LyricsScroller(lines: doc.lines, index: doc.index(at: position) ?? -1, fontSize: state.fontSize)
+            LyricsScroller(lines: doc.lines, index: doc.index(at: position) ?? -1, position: position, fontSize: state.fontSize)
         } else if let track = state.track {
             StatusLines(title: "\(track.title) — \(track.artist)", subtitle: state.lyricsStatus, fontSize: state.fontSize)
         } else {
@@ -35,17 +40,28 @@ enum OverlayLayout {
     static func currentLineCenter(fontSize: Double) -> CGFloat { CGFloat(fontSize) * 1.8 }
     static func slotGap(fontSize: Double) -> CGFloat { CGFloat(fontSize) * 1.65 }
     static let secondaryScale: CGFloat = 0.6
+    static let horizontalPadding: CGFloat = 24
+}
+
+enum OverlayStyle {
+    /// Colour of the sung part of the current line.
+    static let highlight = LinearGradient(
+        colors: [Color(red: 0.40, green: 0.85, blue: 1.0), Color(red: 0.62, green: 1.0, blue: 0.80)],
+        startPoint: .leading, endPoint: .trailing
+    )
 }
 
 private struct LyricsScroller: View {
     let lines: [LyricLine]
     /// Current line, or -1 before the first line.
     let index: Int
+    let position: TimeInterval
     let fontSize: Double
 
     var body: some View {
         GeometryReader { geo in
             let width = geo.size.width
+            let textWidth = width - OverlayLayout.horizontalPadding * 2
             let currentY = OverlayLayout.currentLineCenter(fontSize: fontSize)
             let gap = OverlayLayout.slotGap(fontSize: fontSize)
             // Previous line (sliding out), current, next, and the one after (sliding in).
@@ -62,7 +78,8 @@ private struct LyricsScroller: View {
                 if lower <= upper {
                     ForEach(lower...upper, id: \.self) { i in
                         let distance = i - index
-                        LyricText(text: lines[i].text, fontSize: fontSize)
+                        let metrics = LineMetricsCache.shared.metrics(for: lines[i], baseFontSize: fontSize, maxWidth: textWidth)
+                        KaraokeLine(text: lines[i].text, metrics: metrics, progressX: progress(for: i, distance: distance, metrics: metrics))
                             .frame(width: width)
                             .scaleEffect(distance == 0 ? 1 : OverlayLayout.secondaryScale)
                             .opacity(Self.opacity(forDistance: distance))
@@ -76,11 +93,47 @@ private struct LyricsScroller: View {
         .clipped()
     }
 
+    private func progress(for i: Int, distance: Int, metrics: LineMetrics) -> CGFloat? {
+        if distance == 0 { return metrics.progressX(at: position, line: lines[i]) }
+        if distance < 0 { return metrics.width }   // finished line stays coloured while it slides out
+        return nil
+    }
+
     private static func opacity(forDistance distance: Int) -> Double {
         switch distance {
         case 0: return 1
         case 1: return 0.7
         default: return 0
+        }
+    }
+}
+
+/// One line: white text with a coloured copy on top, masked to the sung part.
+private struct KaraokeLine: View {
+    let text: String
+    let metrics: LineMetrics
+    /// Points from the leading edge that are sung; nil for plain white.
+    let progressX: CGFloat?
+
+    var body: some View {
+        ZStack(alignment: .leading) {
+            Text(text)
+                .font(.system(size: metrics.fontSize, weight: .bold))
+                .foregroundStyle(.white)
+                .lineLimit(1)
+                .fixedSize()
+                .shadow(color: .black.opacity(0.9), radius: 2, x: 0, y: 1)
+                .shadow(color: .black.opacity(0.5), radius: 8, x: 0, y: 2)
+            if let progressX, progressX > 0.5 {
+                Text(text)
+                    .font(.system(size: metrics.fontSize, weight: .bold))
+                    .foregroundStyle(OverlayStyle.highlight)
+                    .lineLimit(1)
+                    .fixedSize()
+                    .mask(alignment: .leading) {
+                        Rectangle().frame(width: progressX)
+                    }
+            }
         }
     }
 }
@@ -111,8 +164,8 @@ private struct StatusLines: View {
     }
 }
 
-/// One line of text in the system font, with a shadow so it stays readable on
-/// any background.
+/// One line of plain text in the system font, with a shadow so it stays
+/// readable on any background.
 private struct LyricText: View {
     let text: String
     let fontSize: Double
@@ -123,6 +176,7 @@ private struct LyricText: View {
             .foregroundStyle(.white)
             .lineLimit(1)
             .minimumScaleFactor(0.5)
+            .padding(.horizontal, OverlayLayout.horizontalPadding)
             .shadow(color: .black.opacity(0.9), radius: 2, x: 0, y: 1)
             .shadow(color: .black.opacity(0.5), radius: 8, x: 0, y: 2)
     }
