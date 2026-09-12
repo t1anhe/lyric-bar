@@ -13,12 +13,12 @@ struct OverlayView: View {
             content(at: position)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        // In move mode the window must catch clicks to be draggable; macOS lets
-        // clicks fall through fully transparent pixels, so keep an invisible fill.
-        .background(Color.black.opacity(state.movable ? 0.01 : 0))
+        // macOS lets clicks fall through fully transparent pixels, which would
+        // defeat the ⌥-drag, so keep an invisible fill.
+        .background(Color.black.opacity(0.01))
         .overlay(
             RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .strokeBorder(Color.white.opacity(state.movable ? 0.35 : 0), style: StrokeStyle(lineWidth: 1, dash: [6, 4]))
+                .strokeBorder(Color.white.opacity(state.dragging ? 0.35 : 0), style: StrokeStyle(lineWidth: 1, dash: [6, 4]))
         )
     }
 

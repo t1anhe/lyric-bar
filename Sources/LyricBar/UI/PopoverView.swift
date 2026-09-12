@@ -11,7 +11,8 @@ struct PopoverView: View {
                 Image(systemName: "music.note.list")
                 Text("LyricBar").font(.headline)
                 Spacer()
-                Text("v0.2").foregroundStyle(.secondary).font(.caption)
+                Text("v\(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "dev")")
+                    .foregroundStyle(.secondary).font(.caption)
             }
 
             GroupBox("Now Playing") {
@@ -34,10 +35,17 @@ struct PopoverView: View {
             }
 
             Toggle("Show lyrics overlay", isOn: $state.overlayVisible)
-            VStack(alignment: .leading, spacing: 2) {
-                Toggle("Move mode (drag to reposition)", isOn: $state.movable)
-                Text("Off: clicks pass through and the lyrics fade while the mouse is over them.")
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Move: right-click and drag the lyrics, or hold ⌥ and drag. They snap to the screen edges and centre. Clicks pass through otherwise.")
                     .font(.caption).foregroundStyle(.secondary)
+                if !state.accessibilityTrusted {
+                    HStack {
+                        Text("Right-drag needs Accessibility access.").font(.caption).foregroundStyle(.orange)
+                        Spacer()
+                        Button("Open Settings") { OverlayWindowController.openAccessibilitySettings() }
+                            .font(.caption).controlSize(.small)
+                    }
+                }
             }
 
             HStack {

@@ -27,13 +27,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         statusBar = StatusBarController(state: state, reloadLyrics: { [weak self] in self?.reloadLyrics() })
 
         state.$overlayVisible.dropFirst().sink { [weak self] _ in self?.overlay?.updateVisibility() }.store(in: &cancellables)
-        state.$movable.sink { [weak self] movable in self?.overlay?.setMovable(movable) }.store(in: &cancellables)
         state.$fontSize.sink { [weak self] size in self?.overlay?.setFontSize(size) }.store(in: &cancellables)
 
         let monitor = AppleMusicMonitor()
         monitor.onSnapshot = { [weak self] snapshot in self?.handle(snapshot) }
         self.monitor = monitor
         monitor.start()
+        overlay?.setUpRightDrag()
         installDebugChannel()
     }
 
@@ -51,6 +51,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     self.reloadLyrics()
                 case let script where script.hasPrefix("script:"):
                     (self.monitor as? AppleMusicMonitor)?.debugRun(script: String(script.dropFirst("script:".count)))
+                case let move where move.hasPrefix("move:"):
+                    let parts = move.dropFirst("move:".count).split(separator: ",").compactMap { Double($0) }
+                    if parts.count == 2 { self.overlay?.debugMove(to: NSPoint(x: parts[0], y: parts[1])) }
                 default:
                     Log.warn("unknown debug command")
                 }

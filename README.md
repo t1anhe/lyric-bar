@@ -34,8 +34,13 @@ adjust the timing offset and the font size, or quit.
 
 The overlay never gets in the way: clicks pass straight through it, and it fades
 out while the mouse pointer is over it so you can read and click whatever is
-underneath. To reposition it, switch on **Move mode** in the popover, drag the
-dashed area, and switch Move mode off again. The position is remembered.
+underneath. To reposition it, **right-click and drag** the lyrics, or hold **⌥**
+and drag. It snaps to the screen edges (the bottom edge is the top of the Dock)
+and to the horizontal and vertical centre lines. The position is remembered.
+
+Right-drag works through a session-wide event tap, which macOS only allows with
+the Accessibility permission (System Settings > Privacy & Security >
+Accessibility). LyricBar asks once on first launch; ⌥-drag needs no permission.
 
 The current line fills with colour word by word as it is sung (Apple's lyrics
 carry word timing; for line-timed lyrics the fill is interpolated).
@@ -71,10 +76,12 @@ Music.app ──notifications + AppleScript──▶ AppleMusicMonitor ──▶
 
 - `make probe TITLE="Song" ARTIST="Artist" DURATION=208` runs the lyrics pipeline
   without the UI and prints what it finds.
-- The app is ad-hoc signed. In testing the Automation permission survived
-  rebuilds (it is keyed to the bundle identifier). If macOS ever asks again, a
-  self-signed "Code Signing" certificate from Keychain Access gives a stable
-  identity: `CODESIGN_IDENTITY="Your Cert Name" make app`.
+- The app is ad-hoc signed. The Automation permission survived rebuilds in
+  testing, but the Accessibility grant is tied to the code signature and may
+  stop working after a rebuild (the switch stays on but the event tap cannot be
+  created; remove and re-add LyricBar in System Settings). A self-signed
+  "Code Signing" certificate from Keychain Access gives a stable identity:
+  `CODESIGN_IDENTITY="Your Cert Name" make app`.
 - `make install` copies the bundle to `/Applications` so Spotlight and
   launch-at-login can find it.
 - Logs: `~/Library/Logs/LyricBar/lyricbar.log` and `log stream --predicate 'subsystem == "dev.lyricbar"'`.
@@ -82,7 +89,7 @@ Music.app ──notifications + AppleScript──▶ AppleMusicMonitor ──▶
 ## Roadmap
 
 - [x] v0.1 Apple Music, first-party lyrics, current + next line, menu bar controls
-- [x] v0.2 Word-by-word highlight, click-through with hover fade, move mode
+- [x] v0.2 Word-by-word highlight, click-through with hover fade, right-drag with edge snapping
 - [ ] v0.2.x Translation line, launch at login, hide when idle
 - [ ] v0.3 Spotify, multiple displays, style presets
 - [ ] v0.4 Manual lyrics search when the match is wrong, local `.lrc` files

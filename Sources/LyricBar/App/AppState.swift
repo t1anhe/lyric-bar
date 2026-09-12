@@ -11,9 +11,10 @@ final class AppState: ObservableObject {
 
     // Settings (persisted).
     @Published var overlayVisible: Bool { didSet { defaults.set(overlayVisible, forKey: Keys.overlayVisible) } }
-    /// Move mode: the overlay catches clicks and can be dragged. Otherwise it is
-    /// click-through and fades while the mouse is over it.
-    @Published var movable: Bool { didSet { defaults.set(movable, forKey: Keys.movable) } }
+    /// True while the overlay is being dragged (or ⌥ is held over it); shows the outline.
+    @Published var dragging = false
+    /// Whether macOS lets us intercept right-clicks (System Settings > Accessibility).
+    @Published var accessibilityTrusted = false
     @Published var offset: TimeInterval { didSet { defaults.set(offset, forKey: Keys.offset) } }
     @Published var fontSize: Double { didSet { defaults.set(fontSize, forKey: Keys.fontSize) } }
     @Published var lrclibEnabled: Bool { didSet { defaults.set(lrclibEnabled, forKey: Keys.lrclibEnabled) } }
@@ -24,7 +25,6 @@ final class AppState: ObservableObject {
 
     private enum Keys {
         static let overlayVisible = "overlayVisible"
-        static let movable = "overlayMovable"
         static let offset = "offset"
         static let fontSize = "fontSize"
         static let lrclibEnabled = "lrclibEnabled"
@@ -33,13 +33,11 @@ final class AppState: ObservableObject {
     init() {
         defaults.register(defaults: [
             Keys.overlayVisible: true,
-            Keys.movable: false,
             Keys.offset: 0.0,
             Keys.fontSize: 30.0,
             Keys.lrclibEnabled: true,
         ])
         overlayVisible = defaults.bool(forKey: Keys.overlayVisible)
-        movable = defaults.bool(forKey: Keys.movable)
         offset = defaults.double(forKey: Keys.offset)
         fontSize = defaults.double(forKey: Keys.fontSize)
         lrclibEnabled = defaults.bool(forKey: Keys.lrclibEnabled)
