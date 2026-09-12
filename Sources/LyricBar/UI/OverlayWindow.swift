@@ -116,6 +116,7 @@ final class OverlayWindowController {
     private static let accessibilityPromptedKey = "accessibilityPrompted"
     private static let fadedAlpha: CGFloat = 0.15
     private static let snapDistance: CGFloat = 24
+    private static let centerSnapDistance: CGFloat = 32
 
     init(state: AppState) {
         self.state = state
@@ -233,8 +234,11 @@ final class OverlayWindowController {
         saveFrame()
     }
 
-    /// Snap to the edges and the centre lines of the screen the overlay is on
-    /// (the visible area, so "bottom" is the top of the Dock), and keep it on screen.
+    /// Snap to the screen the overlay is on: horizontally only to the centre (the
+    /// window frame is invisible and the text is centred in it, so snapping the
+    /// frame to the left or right edge just leaves the text floating mid-half),
+    /// vertically to the top of the Dock, the bottom of the menu bar and the
+    /// middle. Always keeps the window on screen.
     func snapToEdges() {
         var frame = panel.frame
         let screen = NSScreen.screens.max { a, b in
@@ -242,13 +246,14 @@ final class OverlayWindowController {
         } ?? NSScreen.main
         guard let visible = screen?.visibleFrame else { return }
 
-        func snap(_ value: CGFloat, to candidates: [CGFloat]) -> CGFloat {
+        func snap(_ value: CGFloat, to candidates: [CGFloat], within distance: CGFloat) -> CGFloat {
             guard let nearest = candidates.min(by: { abs($0 - value) < abs($1 - value) }),
-                  abs(nearest - value) <= Self.snapDistance else { return value }
+                  abs(nearest - value) <= distance else { return value }
             return nearest
         }
-        frame.origin.x = snap(frame.origin.x, to: [visible.minX, visible.maxX - frame.width, visible.midX - frame.width / 2])
-        frame.origin.y = snap(frame.origin.y, to: [visible.minY, visible.maxY - frame.height, visible.midY - frame.height / 2])
+        frame.origin.x = snap(frame.origin.x, to: [visible.midX - frame.width / 2], within: Self.centerSnapDistance)
+        frame.origin.y = snap(frame.origin.y, to: [visible.minY, visible.maxY - frame.height], within: Self.snapDistance)
+        frame.origin.y = snap(frame.origin.y, to: [visible.midY - frame.height / 2], within: Self.centerSnapDistance)
         frame.origin.x = min(max(frame.origin.x, visible.minX), visible.maxX - frame.width)
         frame.origin.y = min(max(frame.origin.y, visible.minY), visible.maxY - frame.height)
 

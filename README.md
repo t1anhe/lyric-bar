@@ -35,8 +35,8 @@ adjust the timing offset and the font size, or quit.
 The overlay never gets in the way: clicks pass straight through it, and it fades
 out while the mouse pointer is over it so you can read and click whatever is
 underneath. To reposition it, **right-click and drag** the lyrics, or hold **⌥**
-and drag. It snaps to the screen edges (the bottom edge is the top of the Dock)
-and to the horizontal and vertical centre lines. The position is remembered.
+and drag. It snaps to the horizontal centre of the screen, to the top of the
+Dock, to the bottom of the menu bar and to mid-height. The position is remembered.
 
 Right-drag works through a session-wide event tap, which macOS only allows with
 the Accessibility permission (System Settings > Privacy & Security >
@@ -76,12 +76,13 @@ Music.app ──notifications + AppleScript──▶ AppleMusicMonitor ──▶
 
 - `make probe TITLE="Song" ARTIST="Artist" DURATION=208` runs the lyrics pipeline
   without the UI and prints what it finds.
-- The app is ad-hoc signed. The Automation permission survived rebuilds in
-  testing, but the Accessibility grant is tied to the code signature and may
-  stop working after a rebuild (the switch stays on but the event tap cannot be
-  created; remove and re-add LyricBar in System Settings). A self-signed
-  "Code Signing" certificate from Keychain Access gives a stable identity:
-  `CODESIGN_IDENTITY="Your Cert Name" make app`.
+- By default the app is ad-hoc signed. The Automation permission survives
+  rebuilds, but the Accessibility grant is tied to the exact code signature and
+  is lost on every rebuild. Fix: create a self-signed certificate once in
+  Keychain Access (Certificate Assistant > Create a Certificate, name
+  `LyricBar Dev`, identity type Self Signed Root, certificate type Code Signing).
+  The build script signs with it automatically when it exists, or pass another
+  name with `CODESIGN_IDENTITY="Name" make app`.
 - `make install` copies the bundle to `/Applications` so Spotlight and
   launch-at-login can find it.
 - Logs: `~/Library/Logs/LyricBar/lyricbar.log` and `log stream --predicate 'subsystem == "dev.lyricbar"'`.

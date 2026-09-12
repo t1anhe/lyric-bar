@@ -12,7 +12,16 @@ cd "$(dirname "$0")/.."
 
 CONFIG="${1:-release}"
 APP="build/LyricBar.app"
-IDENTITY="${CODESIGN_IDENTITY:--}"
+# Prefer a self-signed "LyricBar Dev" certificate when one exists in the keychain:
+# a stable identity keeps the Accessibility and Automation grants across rebuilds.
+IDENTITY="${CODESIGN_IDENTITY:-}"
+if [ -z "$IDENTITY" ]; then
+  if security find-identity -v -p codesigning 2>/dev/null | grep -q '"LyricBar Dev"'; then
+    IDENTITY="LyricBar Dev"
+  else
+    IDENTITY="-"
+  fi
+fi
 
 swift build -c "$CONFIG"
 
