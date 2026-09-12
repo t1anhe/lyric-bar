@@ -67,8 +67,6 @@ Music.app ──notifications + AppleScript──▶ AppleMusicMonitor ──▶
    borderless, non-activating `NSPanel` that joins all Spaces and floats above
    full-screen apps.
 
-See [docs/ARCHITECTURE.zh.md](docs/ARCHITECTURE.zh.md) for a walkthrough in Chinese.
-
 ## Development notes
 
 - `make probe TITLE="Song" ARTIST="Artist" DURATION=208` runs the lyrics pipeline
