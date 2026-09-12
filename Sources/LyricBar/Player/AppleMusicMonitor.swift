@@ -70,6 +70,22 @@ final class AppleMusicMonitor: PlayerMonitor {
         queue.async { self.poll() }
     }
 
+    /// Debug: run an arbitrary AppleScript against Music and log the result.
+    func debugRun(script source: String) {
+        queue.async {
+            let started = Date()
+            var err: NSDictionary?
+            let result = NSAppleScript(source: source)?.executeAndReturnError(&err)
+            let ms = Int(Date().timeIntervalSince(started) * 1000)
+            if let result {
+                let text = result.stringValue ?? "<\(result.numberOfItems) items>"
+                Log.info("debug script (\(ms) ms): \(text.count) chars: \(text.prefix(120).replacingOccurrences(of: "\n", with: " ⏎ "))")
+            } else {
+                Log.warn("debug script failed (\(ms) ms): \(err ?? [:])")
+            }
+        }
+    }
+
     private func scheduleTimer(interval: TimeInterval) {
         timer?.cancel()
         let t = DispatchSource.makeTimerSource(queue: queue)

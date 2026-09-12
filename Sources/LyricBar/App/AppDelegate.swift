@@ -34,6 +34,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         monitor.onSnapshot = { [weak self] snapshot in self?.handle(snapshot) }
         self.monitor = monitor
         monitor.start()
+        installDebugChannel()
+    }
+
+    /// `dev.lyricbar.debug` distributed notifications let a terminal poke the
+    /// running app (which holds the Automation permission) while developing.
+    private func installDebugChannel() {
+        DistributedNotificationCenter.default().addObserver(
+            forName: Notification.Name("dev.lyricbar.debug"), object: nil, queue: .main
+        ) { [weak self] note in
+            MainActor.assumeIsolated {
+                guard let self, let command = note.object as? String else { return }
+                Log.info("debug command: \(command)")
+                switch command {
+                case "reload":
+                    self.reloadLyrics()
+                case let script where script.hasPrefix("script:"):
+                    (self.monitor as? AppleMusicMonitor)?.debugRun(script: String(script.dropFirst("script:".count)))
+                default:
+                    Log.warn("unknown debug command")
+                }
+            }
+        }
     }
 
     func applicationWillTerminate(_ notification: Notification) {
@@ -69,17 +91,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard let resolver else { return }
         state.lyricsStatus = "Searching…"
         lyricsTask = Task { [weak self] in
-            let doc = await resolver.resolve(track, progress: { status in
+            let doc = await resolver.resolve(track, onDocument: { doc in
                 Task { @MainActor [weak self] in
-                    guard let self, self.state.track?.contentKey == track.contentKey, self.state.lyrics == nil else { return }
-                    self.state.lyricsStatus = status
+                    guard let self, self.state.track?.contentKey == track.contentKey else { return }
+                    self.state.lyrics = doc
+                    self.state.lyricsStatus = "\(doc.lines.count) lines · \(doc.source) · \(doc.timing.rawValue) timing"
                 }
             })
             guard !Task.isCancelled, let self, self.state.track?.contentKey == track.contentKey else { return }
-            self.state.lyrics = doc
-            if let doc {
-                self.state.lyricsStatus = "\(doc.lines.count) lines · \(doc.source) · \(doc.timing.rawValue) timing"
-            } else {
+            if doc == nil {
                 self.state.lyricsStatus = "No lyrics found"
             }
         }

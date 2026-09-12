@@ -20,7 +20,7 @@ enum Probe {
 
         let done = DispatchSemaphore(value: 0)
         Task {
-            if let doc = await resolver.resolve(track) {
+            if let doc = await resolver.resolve(track, onDocument: { _ in }) {
                 print("source: \(doc.source)  timing: \(doc.timing.rawValue)  lines: \(doc.lines.count)  lang: \(doc.language ?? "-")")
                 for line in doc.lines.prefix(6) {
                     let words = line.words.isEmpty ? "" : "  (\(line.words.count) words)"
